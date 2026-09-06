@@ -4,7 +4,8 @@ plugins {
 
 allprojects {
     group = "me.neznamy"
-    version = "6.1.3"
+    // XMine: 6.1.3 upstream + our patches. Coordinate: ru.xmine.thirdparty:tab.
+    version = "6.1.3-xmine.1"
     description = "An all-in-one solution that works"
 
     ext.set("id", "tab")
