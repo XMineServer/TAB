@@ -77,14 +77,40 @@ public abstract class ConfigurationFile {
         Object value = values;
         for (String section : path.contains(".") ? path.split("\\.") : new String[] {path}) {
             if (!(value instanceof Map)) {
-                if (defaultValue != null) set(path, defaultValue);
+                // XMine: default returned, NOT written back - see the note below.
                 return defaultValue;
             }
             value = getIgnoreCase((Map<Object, Object>) value, section);
         }
         if (value == null && defaultValue != null) {
-            TAB.getInstance().debug("Inserting missing config option \"" + path + "\" with value \"" + defaultValue + "\" into " + file.getName());
-            set(path, defaultValue);
+            // XMine: upstream calls set(path, defaultValue) here, which runs save() and dumps
+            // the whole file back to disk. We deliberately do not.
+            //
+            // Two reasons, and the first one is the dangerous one:
+            //
+            // 1. save() writes the values as they are held in memory, which means already
+            //    resolved. A config that reads
+            //        password: !ENV ${MYSQL_PASSWORD}
+            //    would come back as the real password in plain text, and the !ENV tag - the
+            //    entire point of our fork - would be gone. Nothing triggers this on an
+            //    unchanged set of keys, so a restart test does not show it: it fires the
+            //    first time a TAB release adds a new top level option, which upstream does
+            //    every few versions (ping-spoof and use-online-uuid-in-tablist in 2024-11,
+            //    compensate-for-packetevents-bug in 2025-01, proxy-support.enabled in
+            //    2025-02). Keeping the write would make this fork create the very leak it
+            //    exists to prevent.
+            //
+            // 2. Writing back buys us nothing anyway. Our configs are baked into the image
+            //    and laid out fresh on every start; plugins/ is not a volume, so anything
+            //    the plugin writes lands in the container's writable layer and is gone on
+            //    the next recreate. Updating a plugin is a rare event and comes together
+            //    with updating its config.
+            //
+            // The plugin still gets the default value - only the write is dropped. save()
+            // itself is untouched: LegacyConverter and ModernConverter call it when migrating
+            // old configs, and there the write is meaningful and wanted.
+            TAB.getInstance().debug("Config option \"" + path + "\" is missing in " + file.getName() +
+                    ", using default value \"" + defaultValue + "\" (not written back to the file).");
             return defaultValue;
         }
         return value;
