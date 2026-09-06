@@ -86,7 +86,13 @@ jobs:
           echo "sha256: $SHA"
 
       - name: Publish
-        run: ./gradlew :jar:publishXminePublicationToXmineRepository --stacktrace
+        # -Dorg.gradle.configureondemand=false обязателен. С включённым (он стоит в
+        # gradle.properties проекта) вызов ОДНОЙ задачи из :jar конфигурирует соседние
+        # модули не полностью: часть межпроектной обвязки пропадает, модули пересобираются
+        # с чужими настройками и падают на «pattern matching in instanceof is not supported
+        # in -source 8». Проверено: с флагом граф задач 372 задачи, без него 317.
+        # В шаге Build той же проблемы нет, потому что `build` и так конфигурирует всё.
+        run: ./gradlew -Dorg.gradle.configureondemand=false :jar:publishXminePublicationToXmineRepository --stacktrace
 
       - name: Report coordinate
         run: |
