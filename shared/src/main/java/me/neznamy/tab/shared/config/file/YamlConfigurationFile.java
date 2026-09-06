@@ -11,6 +11,7 @@ import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.TypeDescription;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.env.EnvScalarConstructor;
+import org.yaml.snakeyaml.error.MissingEnvironmentVariableException;
 import org.yaml.snakeyaml.error.YAMLException;
 
 import java.io.*;
@@ -48,26 +49,29 @@ public class YamlConfigurationFile extends ConfigurationFile {
             input = new FileInputStream(file);
             LoaderOptions loaderOptions = new LoaderOptions();
             loaderOptions.setCodePointLimit(Integer.MAX_VALUE);
-            // XMine: allow environment variable substitution in config files.
-            //
-            // EnvScalarConstructor resolves ${VAR} and ${VAR:-default} but ONLY on scalars
-            // explicitly tagged !ENV, so untagged values keep their literal text and every
-            // existing config keeps parsing exactly as before. Example:
+            // XMine: allow environment variable substitution in config files. Substitution
+            // happens ONLY on scalars explicitly tagged !ENV, so untagged values keep their
+            // literal text and every existing config keeps parsing exactly as before:
             //     password: !ENV ${MYSQL_PASSWORD}
+            // See StrictEnvScalarConstructor below for the unset-variable policy.
             //
-            // The 3-argument constructor is used instead of the no-arg one so that our
-            // loaderOptions (code point limit) is kept: the no-arg one builds its own
-            // LoaderOptions internally. Passing Object.class as the root type makes it
-            // behave exactly like the default `new Constructor(loaderOptions)` that
-            // `new Yaml(loaderOptions)` used to create - Constructor leaves rootTag alone
-            // for Object.class - with the !ENV tag added on top.
-            //
-            // new Yaml(BaseConstructor) picks the LoaderOptions up from the constructor,
-            // and the dumper is irrelevant here: save() builds its own Yaml instance.
-            Yaml yaml = new Yaml(new EnvScalarConstructor(new TypeDescription(Object.class), null, loaderOptions));
+            // new Yaml(BaseConstructor) takes the LoaderOptions from the constructor, so the
+            // code point limit above is kept. The dumper is irrelevant here: save() builds
+            // its own Yaml instance.
+            Yaml yaml = new Yaml(new StrictEnvScalarConstructor(loaderOptions));
             values = yaml.load(input);
             if (values == null) values = new LinkedHashMap<>();
             input.close();
+        } catch (MissingEnvironmentVariableException e) {
+            // Reported separately from the generic YAMLException below: the file is not
+            // broken, the environment it was started in is.
+            if (input != null) input.close();
+            TAB tab = TAB.getInstance();
+            tab.setBrokenFile(destination.getName());
+            tab.getPlatform().logWarn(new TabTextComponent("File " + destination + " uses an environment variable that is not set.", TabTextColor.RED));
+            tab.getPlatform().logInfo(new TabTextComponent(e.getMessage(), TabTextColor.GOLD));
+            tab.getPlatform().logInfo(new TabTextComponent("Set the variable before starting the server, or write a default into the config as ${VARIABLE:-default}.", TabTextColor.GOLD));
+            throw e;
         } catch (YAMLException e) {
             if (input != null) input.close();
             TAB tab = TAB.getInstance();
@@ -82,6 +86,42 @@ public class YamlConfigurationFile extends ConfigurationFile {
                 }
             }
             throw e;
+        }
+    }
+
+    /**
+     * XMine: {@link EnvScalarConstructor} with a fail-loud policy for unset variables.
+     *
+     * <p>Upstream resolves a bare {@code ${VAR}} of an unset or empty variable to an empty
+     * string. For us that is a step backwards from the shell substitution it replaces: an
+     * empty database password produces a connection failure far away from its cause, and
+     * the config looks fine while the server is down. So a bare {@code ${VAR}} now aborts
+     * loading with {@link MissingEnvironmentVariableException}, naming the variable.
+     *
+     * <p>All the forms that state an intent are left to upstream and keep working:
+     * {@code ${VAR:-default}} and {@code ${VAR-default}} substitute the default,
+     * {@code ${VAR:-}} deliberately yields an empty string, and {@code ${VAR:?}} /
+     * {@code ${VAR?}} keep their own error messages.
+     */
+    private static class StrictEnvScalarConstructor extends EnvScalarConstructor {
+
+        StrictEnvScalarConstructor(@NonNull LoaderOptions loaderOptions) {
+            // Object.class as the root type keeps rootTag untouched, so this behaves exactly
+            // like the default Constructor that new Yaml(loaderOptions) used to build. The
+            // no-argument EnvScalarConstructor() could not be used: it creates its own
+            // LoaderOptions and would drop the code point limit set above.
+            super(new TypeDescription(Object.class), null, loaderOptions);
+        }
+
+        @Override
+        public String apply(String name, String separator, String value, String environment) {
+            // separator == null means the config wrote a bare ${VAR}: no default, no explicit
+            // "?" error form. Anything else is an intent upstream already handles correctly.
+            if (separator == null && (environment == null || environment.isEmpty())) {
+                throw new MissingEnvironmentVariableException("Environment variable " + name +
+                        " is not set (or is empty). Set it, or write ${" + name + ":-default} to allow a fallback.");
+            }
+            return super.apply(name, separator, value, environment);
         }
     }
 
