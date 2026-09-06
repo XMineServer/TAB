@@ -69,25 +69,33 @@ jobs:
       - name: Verify the universal jar
         run: |
           # Нам нужна универсальная сборка (та, что стоит на прокси), а не
-          # Paper-специфичная «broken Paper» — проверяем, что в jar есть класс
-          # велосити-платформы и зашейженный snakeyaml с EnvScalarConstructor.
+          # Paper-специфичная «broken Paper»: проверяем, что в jar есть класс
+          # велосити-платформы. Заодно проверяем, что зашейженный snakeyaml
+          # приехал вместе с пакетом env — без него правка не работает, а
+          # заметить это можно было бы только в рантайме на проде.
           set -eu
           VERSION="$(sed -n 's/^ *version = "\(.*\)"$/\1/p' build.gradle.kts | head -1)"
           JAR="jar/build/libs/TAB v${VERSION}.jar"
           echo "Jar: $JAR"
           unzip -l "$JAR" | grep -q 'me/neznamy/tab/platforms/velocity/VelocityTAB.class'
           unzip -l "$JAR" | grep -q 'me/neznamy/tab/libs/org/yaml/snakeyaml/env/EnvScalarConstructor.class'
-          echo "OK"
+          unzip -l "$JAR" | grep -q 'me/neznamy/tab/shared/config/file/YamlConfigurationFile$StrictEnvScalarConstructor.class'
+          SHA="$(sha256sum "$JAR" | cut -d" " -f1)"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "JAR_SHA256=$SHA" >> "$GITHUB_ENV"
+          echo "sha256: $SHA"
 
       - name: Publish
         run: ./gradlew :jar:publishXminePublicationToXmineRepository --stacktrace
 
       - name: Report coordinate
         run: |
-          VERSION="$(sed -n 's/^ *version = "\(.*\)"$/\1/p' build.gradle.kts | head -1)"
+          # sha256 печатается, чтобы обратную сверку скачанного из Reposilite
+          # можно было сделать против того, что реально собралось здесь.
           {
             echo "### Published"
             echo '```'
-            echo "ru.xmine.thirdparty:tab:$VERSION"
+            echo "ru.xmine.thirdparty:tab:${VERSION}"
+            echo "sha256  ${JAR_SHA256}"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
