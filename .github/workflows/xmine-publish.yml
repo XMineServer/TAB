@@ -1,5 +1,5 @@
 # Публикация нашей сборки TAB в свой Reposilite, раздел-кандидат пары форков
-# `fork-snapshot` (вики, ADR-0056). Координата ru.xmine.thirdparty:tab,
+# `fork-snapshot` (вики, ADR-0056). Координата ru.xmine.thirdparty:tab-velocity,
 # потребитель - VelocityServer (plugins.yml). Закрепляться там можно только на
 # сборку с `xmine/main` (вики, ADR-0060); с фичевых веток `xmine/**` сборка тоже
 # публикуется - для проверки на стенде.
@@ -43,7 +43,7 @@ env:
   # говорит, поверх какого релиза сделан форк, и меняется вместе с
   # перебазированием на новый апстрим.
   MAVEN_GROUP_PATH: ru/xmine/thirdparty
-  MAVEN_ARTIFACT: tab
+  MAVEN_ARTIFACT: tab-velocity
   # Раздел-кандидат пары форков, а не third-party: third-party - зеркало ЧУЖИХ
   # артефактов, а сборку форка правим и собираем мы, поэтому у неё есть стадия.
   MAVEN_SECTION: fork-snapshot
@@ -79,7 +79,7 @@ jobs:
         #
         # Хеш и дата - последнего коммита, затронувшего ВХОДЫ jar, а не HEAD: у
         # неизменившегося jar версия прежняя, координата занята, публикация
-        # пропускается. Универсальный jar затеняет все платформенные модули, поэтому
+        # пропускается. Jar затеняет модули api, shared и velocity, поэтому
         # входы - всё дерево, кроме .github и документации, плюс сам этот workflow:
         # он задаёт JDK и флаги сборки, то есть байты jar. Исключающий pathspec
         # сильнее включающего, поэтому workflow спрашивается отдельно и берётся
@@ -108,7 +108,7 @@ jobs:
       - name: Fail early without credentials
         run: |
           # Без учётки сборка дошла бы до конца и упала на последнем шаге, потратив
-          # десятки минут на компиляцию всех платформ. Дешевле проверить сразу.
+          # минуты на компиляцию. Дешевле проверить сразу.
           set -eu
           if [ -z "${XMINE_MAVEN_USERNAME:-}" ] || [ -z "${XMINE_MAVEN_PASSWORD:-}" ]; then
             echo "::error::Secrets XMINE_MAVEN_USERNAME / XMINE_MAVEN_PASSWORD are not set"
@@ -142,15 +142,14 @@ jobs:
         # Именно `build`, а не `:jar:shadowJar`: у проекта включён
         # org.gradle.configureondemand, и при вызове одной задачи из :jar соседние
         # модули конфигурируются не до конца - compile classpath приезжает пустым, и
-        # сборка падает на «package org.bukkit does not exist». Апстримный
+        # сборка падает с пустым compile classpath. Апстримный
         # .github/workflows/build.yml по той же причине зовёт `./gradlew build`.
         run: ./gradlew build -PxmineVersion="${XMINE_VERSION}" --stacktrace
 
-      - name: Verify the universal jar
+      - name: Verify the Velocity jar
         if: steps.exists.outputs.found == 'false'
         run: |
-          # Нам нужна универсальная сборка (та, что стоит на прокси), а не
-          # Paper-специфичная «broken Paper»: проверяем, что в jar есть класс
+          # Сборка только под Velocity: проверяем, что в jar есть класс
           # велосити-платформы. Заодно проверяем, что зашейженный snakeyaml
           # приехал вместе с пакетом env - без него правка не работает, а
           # заметить это можно было бы только в рантайме.

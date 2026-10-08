@@ -53,7 +53,6 @@ val platformPaths = setOf(
     ":bungeecord",
     ":velocity",
     ":fabric",
-    ":fand",
     ":neoforge"
 //    ":forge"
 )
