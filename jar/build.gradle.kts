@@ -107,10 +107,13 @@ tasks {
 }
 
 // XMine: publish the universal jar (the one we actually run on the proxy - not the
-// Paper-specific "broken Paper" jar) into our Reposilite third-party section.
+// Paper-specific "broken Paper" jar) into our Reposilite. The section is the fork
+// candidate section fork-snapshot, not third-party: third-party mirrors foreign jars,
+// this one we patch and build ourselves (wiki, ADR-0056). The section comes in via
+// XMINE_MAVEN_URL from xmine-publish.yml; the fallback is for a local run.
 publishing {
     publications {
-        create<MavenPublication>("xmine") {
+        create<MavenPublication>("xmineFork") {
             groupId = "ru.xmine.thirdparty"
             artifactId = "tab"
             version = project.version.toString()
@@ -137,7 +140,7 @@ publishing {
     repositories {
         maven {
             name = "xmine"
-            url = uri("https://maven.xmine.world/third-party")
+            url = uri(providers.environmentVariable("XMINE_MAVEN_URL").getOrElse("https://maven.xmine.world/fork-snapshot"))
             credentials {
                 username = (providers.gradleProperty("xmineMavenUsername")
                     .orElse(providers.environmentVariable("XMINE_MAVEN_USERNAME"))).orNull
