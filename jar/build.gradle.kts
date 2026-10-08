@@ -110,7 +110,7 @@ tasks {
 // Paper-specific "broken Paper" jar) into our Reposilite. The section is the fork
 // candidate section fork-snapshot, not third-party: third-party mirrors foreign jars,
 // this one we patch and build ourselves (wiki, ADR-0056). The section comes in via
-// XMINE_MAVEN_URL from xmine-publish.yml; the fallback is for a local run.
+// XMINE_MAVEN_URL from xmine-publish.yml.
 publishing {
     publications {
         create<MavenPublication>("xmineFork") {
@@ -147,6 +147,18 @@ publishing {
                 password = (providers.gradleProperty("xmineMavenPassword")
                     .orElse(providers.environmentVariable("XMINE_MAVEN_PASSWORD"))).orNull
             }
+        }
+    }
+}
+
+// XMine: publish only with a build address. Without -PxmineVersion the version is
+// upstream's bare number, and a local `publish` would put a coordinate that is not a build
+// address into the candidate section - and coordinates there are immutable.
+val xmineVersion = providers.gradleProperty("xmineVersion")
+tasks.withType<PublishToMavenRepository>().configureEach {
+    doFirst {
+        if (!xmineVersion.isPresent) {
+            throw GradleException("Publishing needs -PxmineVersion: the build address computed by .github/workflows/xmine-publish.yml")
         }
     }
 }

@@ -4,11 +4,14 @@ plugins {
 
 allprojects {
     group = "me.neznamy"
-    // XMine: the version is the build address <upstream>-<branch>-<date>-<hash>, computed
-    // from the commit in .github/workflows/xmine-publish.yml and passed in as -PxmineVersion
-    // (wiki, ADR-0056). It lands in the plugin descriptors too, so the jar on the proxy says
-    // which build it is. The fallback only keeps a local build without -P working.
-    version = providers.gradleProperty("xmineVersion").getOrElse("6.1.3-xmine-local")
+    // XMine: upstream's own number stays where upstream keeps it and changes only on a
+    // rebase onto a new upstream release. The published version is the build address
+    // <upstream>-<branch>-<date>-<hash>: .github/workflows/xmine-publish.yml reads the
+    // upstream part from THIS line, computes the rest from git and passes the whole as
+    // -PxmineVersion (wiki, conventions/versioning.md). It lands in the plugin descriptors
+    // too, so the jar on the proxy says which build it is. Without -P a local build keeps
+    // upstream's bare number, and publishing refuses (jar/build.gradle.kts).
+    version = providers.gradleProperty("xmineVersion").getOrElse("6.1.3")
     description = "An all-in-one solution that works"
 
     ext.set("id", "tab")
